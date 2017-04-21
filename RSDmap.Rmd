@@ -1,0 +1,123 @@
+---
+title: "RSD Map"
+author: "LMC"
+date: "April 10, 2017"
+output:
+  pdf_document: default
+  html_document:
+    code_folding: hide
+---
+
+```{r}
+# housekeeping
+rm(list=ls())
+
+#required packages
+#I really do not remember if you will need all of them...
+library(geosphere)
+library(mapdata)
+library(rgeos) 
+library(maptools)
+library(raster)
+library (sp) #
+library(ggplot2) 
+library(ggmap) 
+library(maps) 
+library(rgdal) 
+library(plyr)  
+library(grid)  
+library(GISTools)
+
+#Call scalebar (+arrow) functions
+#To customize these go to BarArrowFunction, file must be on same folder or properly directed
+source("functions/BarArrowFunction.R")
+
+##Call data from RSD points 
+d_sites <- read.table("data/RSDSites.csv",sep=",", header=T)
+```
+
+```{r}
+#Load a shapefile file####
+#call shapefile of Bahamas map
+#all these calls help us to analyze the type of file
+bhms=readShapeSpatial("data/bhs-_bahama_shapefiles.shp")
+proj4string(bhms) <-"+proj=moll +ellps=WGS84" #equal area projection
+summary(bhms)
+bbox(bhms)
+proj4string(bhms)
+head(bhms@data)
+
+#Plot the whole Bahamas####
+#first prepare data file
+#given that the file contains different polygons, we join them in a "single" file to plot them together
+bhms@data$id = rownames(bhms@data)
+bhms.points = fortify(bhms, region="id")
+bhms.df = join(bhms.points, bhms@data, by="id")
+
+#BHS <- ggplot() + geom_polygon(data = bhms.df, aes(x = long, y = lat, group = group)) + 
+#  coord_map(xlim = c(-79.2, -72.5), ylim = c(22.5, 27.5))+
+#  labs(title = "The Bahamas") + theme_bw() + 
+#  theme(panel.grid.major = element_blank(), 
+#        panel.grid.minor = element_blank()) + 
+#  theme(axis.text=element_text(size=28),
+#        axis.title=element_text(size=28,face="bold")) +
+#  theme(legend.text=element_text(size=28))
+
+#Add scale bar
+#changing "orientation" to TRUE or FALSE adds or not the "North Arrow" 
+#BHS + scaleBar(lon = -78.7, lat = 22.7, distanceLon = 100, distanceLat = 20, distanceLegend = 30, dist.unit = "km", orientation = TRUE)
+
+#BHS as Inset map
+#Zoom in rectangle for inset map
+pol<-data.frame(xmin=-76.4,xmax=-76.1 ,ymin=24.7 ,ymax=25)
+#Create inset map
+p2 <- ggplot() + geom_polygon(data = bhms.df, aes(x = long, y = lat, group = group)) + 
+  coord_map(xlim = c(-79.2, -72.9), ylim = c(22.19, 27.2))+
+  theme_bw() + 
+    geom_rect(data = pol, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), alpha=0, colour="red", size = 1, linetype=1)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) + 
+  theme(axis.text.x =element_blank(),axis.text.y= element_blank(), axis.ticks=element_blank(),axis.title.x =element_blank(),axis.title.y= element_blank())
+
+#subset the database to select & plot just South Eleuthera
+RSD.South.df<-subset(bhms, bhms$NAME1 == "South Eleuthera")
+#ggplot(RSD.South.df, aes(long, lat))+
+#  labs(title = "South Eleuthera")
+#Provide the latitude and longitudes from your bbox to zoom into a specific region
+#bbox(RSD.South.df)
+#Plot main map
+RSD <-ggplot(RSD.South.df, aes(long, lat))+geom_polygon(aes(group=group)) + 
+  coord_map(xlim = c(-76.37, -76.13),ylim = c(24.76, 24.94)) + 
+  labs(title = "Rock Sound, South Eleuthera") +
+  theme_bw() + # Omit default grey backdrop
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())+ #Omit default backdrop outline and inner grey gridlines
+  xlab("")+ylab("")+
+  scale_x_continuous(breaks=seq(-76.35,-76.15, 0.05), labels=c(paste(seq(-76.35,-76.15, 0.05),"°W", sep="")))+
+  scale_y_continuous(breaks=seq(24.8,24.9,0.05), labels=c(paste(seq(24.8,24.9,0.05),"°N", sep="")))+
+  theme(axis.text.y =element_text(angle = 90, hjust=0.5)) +
+  theme(axis.text=element_text(size=15))
+
+#Add reef sites
+RSD.sites <- RSD + 
+#  scale_fill_brewer(palette = "Pastel2")
+  geom_point(data = d_sites,aes(d_sites$longdec, d_sites$latdec, color=Lionfish.Removed,shape =Lionfish.Removed),size = 3.5) +
+#    ggplot2::scale_fill_brewer(palette = "Spectral")
+#  viridis::scale_fill_viridis(begin = 0.1,end = 0.93, discrete = TRUE) +
+#  viridis::scale_color_viridis(begin = 0.1,end = 0.93, discrete = TRUE) +
+  theme(legend.position = c(0.9, 0.06),legend.box.background = element_blank()) + 
+#  theme(legend.text=element_text(size=2)) +
+  scaleBar(lon = -76.36, lat = 24.765, distanceLon = 2, distanceLat = .4, distanceLegend = 0.8, dist.unit = "km", orientation = TRUE)
+p1 <- RSD.sites
+
+#plot main and inset together
+pdf("figs/RSD+BHS.pdf", width = 8, height = 8, useDingbats = F)
+grid.newpage()
+vpb_ <- viewport(width = 1, height = 1, x = 0.5, y = 0.5)  # place larger map
+vpa_ <- viewport(width = 0.37, height = 0.37, x = 0.25, y = 0.72)  # inset in upper left
+print(p1, vp = vpb_)
+print(p2, vp = vpa_)
+dev.off()
+```
+
+
